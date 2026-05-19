@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: pixelle-video
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /_stcore/health
+    dockerCommand: sh render-start.sh
+    envVars:
+      - key: TZ
+        value: Asia/Hong_Kong
+      - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+        value: "false"
