@@ -72,6 +72,5 @@ RUN mkdir -p /app/output /app/data /app/temp
 # 8501: Web UI service
 EXPOSE 8000 8501
 
-# Default command (can be overridden in docker-compose)
-CMD ["uv", "run", "python", "api/app.py"]
-
+# Default command for hosted web deployments.
+CMD ["sh", "render-start.sh"]
