@@ -40,7 +40,7 @@ RUN uv --version
 
 # Copy dependency files and source code for building
 # Note: pixelle_video is needed for hatchling to build the package
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock README.md render-start.sh ./
 COPY pixelle_video ./pixelle_video
 
 # Create virtual environment and install dependencies
