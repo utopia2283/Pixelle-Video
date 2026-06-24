@@ -87,8 +87,10 @@ class OpenRouterVideoClient:
                 proxies=self._proxies(),
             )
         resp.raise_for_status()
-        data = resp.json()
-        raw_url = data["data"]["url"]
+        resp_json = resp.json()
+        raw_url = resp_json.get("data", {}).get("url")
+        if not raw_url:
+            raise RuntimeError(f"tmpfiles upload failed: {resp_json}")
         direct_url = self._tmpfiles_direct_url(raw_url)
         logger.debug(f"OpenRouterVideoClient: frame uploaded, direct_url={direct_url}")
         return direct_url
@@ -186,8 +188,9 @@ class OpenRouterVideoClient:
 
             if status in ("completed", "succeeded"):
                 unsigned_urls = last_poll.get("unsigned_urls") or []
-                if unsigned_urls:
-                    video_url = unsigned_urls[0]
+                if not unsigned_urls:
+                    raise RuntimeError("unsigned_urls empty on completion")
+                video_url = unsigned_urls[0]
                 logger.info(f"OpenRouterVideoClient: job completed, url={video_url}")
                 break
 

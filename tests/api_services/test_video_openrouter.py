@@ -310,3 +310,49 @@ def test_max_polls_exhausted_raises(mock_post, mock_get, tmp_path):
     out = tmp_path / "timeout.mp4"
     with pytest.raises(RuntimeError):
         c.generate_video("test", image_path=None, save_path=str(out))
+
+
+# ── test [M-1]: tmpfiles returns 200 but JSON has no data.url → RuntimeError ──
+
+@patch("pixelle_video.services.api_services.video_openrouter.requests.get")
+@patch("pixelle_video.services.api_services.video_openrouter.requests.post")
+def test_tmpfiles_missing_data_url_raises_runtime_error(mock_post, mock_get, tmp_path):
+    """[M-1] If tmpfiles returns 200 but the JSON body has no data.url
+    (e.g. {"status":"error"}), _upload_frame must raise RuntimeError with a
+    message that includes the response JSON, not a bare KeyError."""
+    bad_tmpfiles = MagicMock(status_code=200)
+    bad_tmpfiles.raise_for_status = lambda: None
+    bad_tmpfiles.json = lambda: {"status": "error"}
+    mock_post.side_effect = [bad_tmpfiles]
+
+    fake_image = tmp_path / "frame.png"
+    fake_image.write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
+        b"\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+
+    c = OpenRouterVideoClient(api_key="sk-test", poll_interval=0)
+    out = tmp_path / "out.mp4"
+    with pytest.raises(RuntimeError, match="tmpfiles"):
+        c.generate_video("test prompt", image_path=str(fake_image), save_path=str(out))
+
+
+# ── test [M-3]: completed poll with empty unsigned_urls → clear RuntimeError ──
+
+@patch("pixelle_video.services.api_services.video_openrouter.requests.get")
+@patch("pixelle_video.services.api_services.video_openrouter.requests.post")
+def test_completed_empty_unsigned_urls_raises_clear_error(mock_post, mock_get, tmp_path):
+    """[M-3] When poll returns status=completed but unsigned_urls is an empty list,
+    raise RuntimeError with a message that mentions 'unsigned_urls', not the
+    misleading 'no video URL after N polls' message."""
+    mock_post.side_effect = [_submit_post_mock()]
+    poll_empty = MagicMock(status_code=200)
+    poll_empty.raise_for_status = lambda: None
+    poll_empty.json = lambda: {"status": "completed", "unsigned_urls": []}
+    mock_get.side_effect = [poll_empty]
+
+    c = OpenRouterVideoClient(api_key="sk-test", poll_interval=0)
+    out = tmp_path / "out.mp4"
+    with pytest.raises(RuntimeError, match="unsigned_urls empty on completion"):
+        c.generate_video("test prompt", image_path=None, save_path=str(out))

@@ -91,7 +91,8 @@ def test_t2i_image_saved_correctly(mock_post, tmp_path):
     assert len(paths) == 1
     out_path = paths[0]
     assert os.path.exists(out_path)
-    assert open(out_path, "rb").read() == _png_bytes()
+    with open(out_path, "rb") as f:
+        assert f.read() == _png_bytes()
 
 
 # ---------------------------------------------------------------------------
@@ -160,3 +161,43 @@ def test_video_ratio_and_resolution_not_in_body(mock_post, tmp_path):
     assert "resolution" not in body
     assert "aspect_ratio" not in body
     assert "video_ratio" not in body
+
+
+# ---------------------------------------------------------------------------
+# (e) HTTP URL fallback: _url_to_bytes downloads via requests.get when url
+#     does NOT start with "data:"
+# ---------------------------------------------------------------------------
+@patch("pixelle_video.services.api_services.image_openrouter.requests.get")
+@patch("pixelle_video.services.api_services.image_openrouter.requests.post")
+def test_http_url_fallback_downloaded_and_saved(mock_post, mock_get, tmp_path):
+    """When the response image URL is http:// (not data:), _url_to_bytes must
+    call requests.get to download it, and the file saved to disk must contain
+    the returned bytes."""
+    http_image_url = "http://example.com/generated_image.png"
+
+    # Mock the chat/completions POST — returns an http:// image url
+    mock_post_resp = MagicMock(status_code=200)
+    mock_post_resp.raise_for_status = lambda: None
+    mock_post_resp.json.return_value = _mock_chat_response(http_image_url)
+    mock_post.return_value = mock_post_resp
+
+    # Mock the image download GET — returns raw PNG bytes
+    mock_get_resp = MagicMock(status_code=200)
+    mock_get_resp.raise_for_status = lambda: None
+    mock_get_resp.content = _png_bytes()
+    mock_get.return_value = mock_get_resp
+
+    client = OpenRouterImageClient(api_key="sk-test")
+    paths = client.generate_image("a red panda", save_dir=str(tmp_path))
+
+    # requests.get must have been called with the http:// URL to download it
+    mock_get.assert_called_once()
+    called_url = mock_get.call_args.args[0] if mock_get.call_args.args else mock_get.call_args.kwargs.get("url", "")
+    assert called_url == http_image_url
+
+    # The saved file must contain exactly the bytes returned by requests.get
+    assert len(paths) == 1
+    out_path = paths[0]
+    assert os.path.exists(out_path)
+    with open(out_path, "rb") as f:
+        assert f.read() == _png_bytes()
