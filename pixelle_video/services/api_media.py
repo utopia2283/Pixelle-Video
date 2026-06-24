@@ -14,6 +14,7 @@ from loguru import logger
 
 from pixelle_video.config import config_manager
 from pixelle_video.models.media import MediaResult
+from pixelle_video.services.api_services.image_openrouter import OpenRouterImageClient
 from pixelle_video.utils.os_util import get_output_path
 
 
@@ -33,6 +34,9 @@ class APIProviderMediaService:
             "doubao-seedream-5-0-260128",
             "doubao-seedream-4-5-251128",
             "doubao-seedream-4-0-250828",
+        ],
+        "openrouter": [
+            "bytedance-seed/seedream-4.5",
         ],
     }
 
@@ -477,6 +481,17 @@ class APIProviderMediaService:
         image_paths: Optional[list[str]] = None,
         **params,
     ) -> MediaResult:
+        if provider == "openrouter":
+            return await self._generate_image_openrouter(
+                model=model,
+                prompt=prompt,
+                width=width,
+                height=height,
+                output_path=output_path,
+                image_paths=image_paths,
+                **params,
+            )
+
         from pixelle_video.services.api_services.image_client import ImageClient
 
         client = self._create_image_client()
@@ -499,6 +514,46 @@ class APIProviderMediaService:
 
         if not paths:
             raise RuntimeError(f"API image generation returned no result: provider={provider}, model={model}")
+
+        result_path = paths[0]
+        if output_path and os.path.exists(result_path) and os.path.abspath(result_path) != os.path.abspath(output_path):
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            os.replace(result_path, output_path)
+            result_path = output_path
+
+        return MediaResult(media_type="image", url=result_path)
+
+    async def _generate_image_openrouter(
+        self,
+        model: str,
+        prompt: str,
+        width: Optional[int],
+        height: Optional[int],
+        output_path: Optional[str],
+        image_paths: Optional[list[str]] = None,
+        **params,
+    ) -> MediaResult:
+        cfg = self.config.get("api_providers", {})
+        api_key = cfg.get("openrouter", {}).get("api_key") or None
+        local_proxy = cfg.get("common", {}).get("local_proxy") or None
+        ratio = self._ratio(width, height)
+        resolution = self._resolution(width, height)
+        save_dir = self._save_dir(output_path, "api_images")
+
+        logger.info(f"Generating image via API provider=openrouter, model={model}")
+        client = OpenRouterImageClient(api_key=api_key, local_proxy=local_proxy)
+        paths = await asyncio.to_thread(
+            client.generate_image,
+            prompt=prompt,
+            image_paths=image_paths,
+            model=model,
+            save_dir=save_dir,
+            video_ratio=ratio,
+            resolution=resolution,
+        )
+
+        if not paths:
+            raise RuntimeError(f"API image generation returned no result: provider=openrouter, model={model}")
 
         result_path = paths[0]
         if output_path and os.path.exists(result_path) and os.path.abspath(result_path) != os.path.abspath(output_path):
