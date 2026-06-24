@@ -58,6 +58,13 @@ test_*.py
 
 !bgm/default.mp3
 
+# Track our formal pytest suite (overrides the test_*.py ignore above)
+!tests/
+!tests/**
+
+# SDD progress ledger (scratch, never track)
+.superpowers/
+
 # Temp files
 temp/
 tmp/
