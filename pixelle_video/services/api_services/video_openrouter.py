@@ -173,17 +173,41 @@ class OpenRouterVideoClient:
             )
 
         # ── Step 3: Download ──────────────────────────────────────────────────
+        # Strategy: attempt download WITHOUT Authorization header first.
+        # OpenRouter typically returns a pre-signed CDN URL; sending an Authorization
+        # header to a CDN pre-signed URL can cause a 403 (the CDN treats extra auth
+        # as a signature mismatch).  Only fall back to sending auth if the no-auth
+        # attempt is rejected with 401 or 403 (in case the endpoint genuinely requires it).
+        os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
         dl = requests.get(
             video_url,
-            headers=self._headers(),
+            headers=None,          # no auth — CDN pre-signed URL does not need it
             timeout=self.timeout,
             proxies=self._proxies(),
             stream=True,
         )
+        if dl.status_code in (401, 403):
+            # No-auth attempt was rejected: retry with Authorization header.
+            # This handles the rare case where the download URL is an authenticated
+            # endpoint rather than a CDN pre-signed URL.
+            logger.debug(
+                f"OpenRouterVideoClient: no-auth download got {dl.status_code}, retrying with Authorization header"
+            )
+            dl = requests.get(
+                video_url,
+                headers=self._headers(),   # retry with auth
+                timeout=self.timeout,
+                proxies=self._proxies(),
+                stream=True,
+            )
         dl.raise_for_status()
-        os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+
+        # Stream to disk in 8 KiB chunks to avoid loading the entire video into RAM
+        # (same pattern as video_seedance.py:_download_video).
         with open(save_path, "wb") as f:
-            f.write(dl.content)
+            for chunk in dl.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
         logger.info(f"OpenRouterVideoClient: video saved to {save_path}")
 
         return video_url
