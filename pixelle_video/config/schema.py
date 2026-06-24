@@ -56,6 +56,7 @@ class APIProvidersConfig(BaseModel):
     gemini: APIKeyProviderConfig = Field(default_factory=APIKeyProviderConfig)
     ark: APIKeyProviderConfig = Field(default_factory=APIKeyProviderConfig)
     kling: AccessSecretProviderConfig = Field(default_factory=AccessSecretProviderConfig)
+    openrouter: APIKeyProviderConfig = Field(default_factory=APIKeyProviderConfig)
 
 
 class TTSLocalConfig(BaseModel):
@@ -69,11 +70,19 @@ class TTSComfyUIConfig(BaseModel):
     default_workflow: Optional[str] = Field(default=None, description="Default TTS workflow (optional)")
 
 
+class TTSMiniMaxConfig(BaseModel):
+    """MiniMax T2A TTS configuration"""
+    model: str = Field(default="speech-2.8-turbo", description="MiniMax TTS model")
+    voice: str = Field(default="Cantonese_GentleLady", description="MiniMax voice id (Cantonese)")
+    speed: float = Field(default=1.0, ge=0.5, le=2.0, description="Speech speed multiplier (0.5-2.0)")
+
+
 class TTSSubConfig(BaseModel):
     """TTS-specific configuration (under comfyui.tts)"""
-    inference_mode: str = Field(default="local", description="TTS inference mode: 'local' or 'comfyui'")
+    inference_mode: str = Field(default="local", description="TTS inference mode: 'local', 'comfyui', or 'minimax'")
     local: TTSLocalConfig = Field(default_factory=TTSLocalConfig, description="Local TTS (Edge TTS) configuration")
     comfyui: TTSComfyUIConfig = Field(default_factory=TTSComfyUIConfig, description="ComfyUI TTS configuration")
+    minimax: TTSMiniMaxConfig = Field(default_factory=TTSMiniMaxConfig, description="MiniMax T2A TTS configuration")
     
     # Backward compatibility: keep default_workflow at top level
     @property

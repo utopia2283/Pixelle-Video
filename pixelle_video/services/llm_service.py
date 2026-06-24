@@ -17,6 +17,7 @@ Supports structured output via response_type parameter (Pydantic model).
 """
 
 import json
+import os
 import re
 from typing import Optional, Type, TypeVar, Union
 
@@ -99,6 +100,7 @@ class LLMService:
         final_api_key = (
             api_key
             or self._get_config_value("api_key")
+            or os.getenv("MINIMAX_API_KEY")  # MiniMax-M3 key injected via env when config left blank
             or "dummy-key"  # Ollama doesn't need real key
         )
         
