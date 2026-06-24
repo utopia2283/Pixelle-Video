@@ -1,17 +1,15 @@
-"""OpenRouter Videos API client (Seedance 2.0 etc.). submit -> poll -> download.
+"""OpenRouter Videos API client (Seedance 1.5 Pro etc.). submit -> poll -> download.
 
-NOTE: Response field names below are based on OpenRouter documentation defaults
-and have NOT been verified against a live API call. At deploy time, probe the
-real API and correct field names if needed:
-  - submit response: we expect `id` (fallback: `job_id`)
-  - poll response: we expect `status` in ("completed", "succeeded")
-  - video url: we expect `output.url` (fallback: `data.video.url`)
-# field 名待 deploy 階段真 API 校正
+Frame images MUST be public HTTP URLs — data: URIs are silently ignored by Seedance.
+Local frame images are uploaded to tmpfiles.org to obtain public URLs before submission.
+
+Response field names verified against OpenRouter Videos API:
+  - submit response: polling_url (direct poll URL returned by the server)
+  - poll response: status in ("completed", "succeeded"), unsigned_urls[0] for download
 """
 
 import os
 import time
-import base64
 import logging
 from typing import Optional
 
@@ -19,11 +17,16 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+TMPFILES_UPLOAD_URL = "https://tmpfiles.org/api/v1/upload"
+
 
 class OpenRouterVideoClient:
     """
-    OpenRouter Videos API client for Seedance 2.0 and other video models.
+    OpenRouter Videos API client for Seedance 1.5 Pro and other video models.
     Uses async submit -> poll -> download flow (sync, caller wraps with asyncio.to_thread).
+
+    Frame images are uploaded to tmpfiles.org to obtain public URLs before submission,
+    because Seedance ignores data: URI frames.
     """
 
     def __init__(
@@ -59,19 +62,48 @@ class OpenRouterVideoClient:
         return {"http": self.local_proxy, "https": self.local_proxy}
 
     @staticmethod
-    def _frame(path: str, ftype: str) -> dict:
-        """Encode a local image file as a data URI frame for first_frame/last_frame."""
-        with open(path, "rb") as f:
-            b = base64.b64encode(f.read()).decode()
-        ext = "png" if path.lower().endswith(".png") else "jpeg"
-        return {"frame_type": ftype, "image_url": {"url": f"data:image/{ext};base64,{b}"}}
+    def _tmpfiles_direct_url(url: str) -> str:
+        """Convert a tmpfiles.org page URL to its direct-download URL.
+
+        https://tmpfiles.org/12345/x.png  →  https://tmpfiles.org/dl/12345/x.png
+        """
+        prefix = "https://tmpfiles.org/"
+        if url.startswith(prefix) and not url.startswith("https://tmpfiles.org/dl/"):
+            return "https://tmpfiles.org/dl/" + url[len(prefix):]
+        return url
+
+    def _upload_frame(self, path: str) -> str:
+        """Upload a local image file to tmpfiles.org and return its public direct-link URL.
+
+        Uses a browser-like User-Agent to avoid bot-filter rejections.
+        """
+        logger.debug(f"OpenRouterVideoClient: uploading frame to tmpfiles.org: {path}")
+        with open(path, "rb") as fh:
+            resp = requests.post(
+                TMPFILES_UPLOAD_URL,
+                files={"file": fh},
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=self.timeout,
+                proxies=self._proxies(),
+            )
+        resp.raise_for_status()
+        data = resp.json()
+        raw_url = data["data"]["url"]
+        direct_url = self._tmpfiles_direct_url(raw_url)
+        logger.debug(f"OpenRouterVideoClient: frame uploaded, direct_url={direct_url}")
+        return direct_url
+
+    def _frame(self, path: str, ftype: str) -> dict:
+        """Upload a local image file to tmpfiles.org and return a frame_images entry."""
+        public_url = self._upload_frame(path)
+        return {"frame_type": ftype, "image_url": {"url": public_url}}
 
     def generate_video(
         self,
         prompt: str,
         image_path: Optional[str],
         save_path: str,
-        model: str = "bytedance/seedance-2.0",
+        model: str = "bytedance/seedance-1-5-pro",
         duration: int = 5,
         last_image_path: Optional[str] = None,
         video_ratio: str = "16:9",
@@ -79,13 +111,13 @@ class OpenRouterVideoClient:
         **kwargs,
     ) -> str:
         """
-        Full video generation flow: submit -> poll -> download.
+        Full video generation flow: upload frames → submit → poll → download.
 
         Args:
             prompt: Text prompt describing the video.
             image_path: Local path to the first-frame image (None for text-to-video).
             save_path: Local path where the downloaded video will be saved.
-            model: OpenRouter model identifier. Default: bytedance/seedance-2.0.
+            model: OpenRouter model identifier. Default: bytedance/seedance-1-5-pro.
             duration: Video duration in seconds.
             last_image_path: Optional local path to the last-frame image.
             video_ratio: Aspect ratio string, e.g. "16:9".
@@ -103,18 +135,19 @@ class OpenRouterVideoClient:
             "model": model,
             "prompt": prompt,
             "duration": duration,
-            "aspect_ratio": video_ratio,  # field 名待 deploy 階段真 API 校正
+            "aspect_ratio": video_ratio,
             "resolution": resolution,
         }
 
-        # Optional frame images (first / last frame)
+        # Optional frame images (first / last frame) — upload to tmpfiles for public URLs.
+        # Seedance ignores data: URI frames; public HTTP URLs are required.
         frames = []
         if image_path:
             frames.append(self._frame(image_path, "first_frame"))
         if last_image_path:
             frames.append(self._frame(last_image_path, "last_frame"))
         if frames:
-            payload["frame_images"] = frames  # field 名待 deploy 階段真 API 校正
+            payload["frame_images"] = frames
 
         # Forward any extra caller-supplied fields
         payload.update(kwargs)
@@ -122,7 +155,7 @@ class OpenRouterVideoClient:
         # ── Step 1: Submit ────────────────────────────────────────────────────
         logger.info(f"OpenRouterVideoClient: submitting job model={model}, duration={duration}s")
         r = requests.post(
-            f"{self.base_url}/videos",  # POST /api/v1/videos — 待真 API 校正
+            f"{self.base_url}/videos",
             headers=self._headers(),
             json=payload,
             timeout=self.timeout,
@@ -130,17 +163,19 @@ class OpenRouterVideoClient:
         )
         r.raise_for_status()
         job = r.json()
-        job_id = job.get("id") or job.get("job_id")  # field 名待 deploy 階段真 API 校正
-        if not job_id:
-            raise RuntimeError(f"OpenRouter Videos API did not return a job id: {job}")
-        logger.info(f"OpenRouterVideoClient: job submitted, id={job_id}")
+        polling_url = job.get("polling_url")
+        if not polling_url:
+            raise RuntimeError(
+                f"OpenRouter Videos API did not return a polling_url in submit response: {job}"
+            )
+        logger.info(f"OpenRouterVideoClient: job submitted, polling_url={polling_url}")
 
         # ── Step 2: Poll ──────────────────────────────────────────────────────
         video_url = ""
         last_poll: dict = {}
         for i in range(self.max_polls):
             p = requests.get(
-                f"{self.base_url}/videos/{job_id}",  # GET /api/v1/videos/{id} — 待真 API 校正
+                polling_url,
                 headers=self._headers(),
                 timeout=self.timeout,
                 proxies=self._proxies(),
@@ -149,12 +184,10 @@ class OpenRouterVideoClient:
             last_poll = p.json()
             status = last_poll.get("status")
 
-            if status in ("completed", "succeeded"):  # field 名待 deploy 階段真 API 校正
-                # Try output.url first, then data.video.url
-                video_url = (
-                    (last_poll.get("output") or {}).get("url")  # field 名待 deploy 階段真 API 校正
-                    or (last_poll.get("data") or {}).get("video", {}).get("url", "")
-                )
+            if status in ("completed", "succeeded"):
+                unsigned_urls = last_poll.get("unsigned_urls") or []
+                if unsigned_urls:
+                    video_url = unsigned_urls[0]
                 logger.info(f"OpenRouterVideoClient: job completed, url={video_url}")
                 break
 
@@ -162,7 +195,7 @@ class OpenRouterVideoClient:
                 raise RuntimeError(f"OpenRouter video job failed: {last_poll}")
 
             logger.debug(
-                f"OpenRouterVideoClient: polling job {job_id}, status={status}, attempt={i + 1}"
+                f"OpenRouterVideoClient: polling {polling_url}, status={status}, attempt={i + 1}"
             )
             if self.poll_interval:
                 time.sleep(self.poll_interval)
@@ -173,37 +206,19 @@ class OpenRouterVideoClient:
             )
 
         # ── Step 3: Download ──────────────────────────────────────────────────
-        # Strategy: attempt download WITHOUT Authorization header first.
-        # OpenRouter typically returns a pre-signed CDN URL; sending an Authorization
-        # header to a CDN pre-signed URL can cause a 403 (the CDN treats extra auth
-        # as a signature mismatch).  Only fall back to sending auth if the no-auth
-        # attempt is rejected with 401 or 403 (in case the endpoint genuinely requires it).
+        # unsigned_urls are authenticated endpoints — always send Authorization header.
+        # (Unlike CDN pre-signed URLs, unsigned_urls require Bearer auth from OpenRouter.)
         os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
         dl = requests.get(
             video_url,
-            headers=None,          # no auth — CDN pre-signed URL does not need it
+            headers=self._headers(),   # Bearer auth required for unsigned_urls
             timeout=self.timeout,
             proxies=self._proxies(),
             stream=True,
         )
-        if dl.status_code in (401, 403):
-            # No-auth attempt was rejected: retry with Authorization header.
-            # This handles the rare case where the download URL is an authenticated
-            # endpoint rather than a CDN pre-signed URL.
-            logger.debug(
-                f"OpenRouterVideoClient: no-auth download got {dl.status_code}, retrying with Authorization header"
-            )
-            dl = requests.get(
-                video_url,
-                headers=self._headers(),   # retry with auth
-                timeout=self.timeout,
-                proxies=self._proxies(),
-                stream=True,
-            )
         dl.raise_for_status()
 
-        # Stream to disk in 8 KiB chunks to avoid loading the entire video into RAM
-        # (same pattern as video_seedance.py:_download_video).
+        # Stream to disk in 8 KiB chunks to avoid loading the entire video into RAM.
         with open(save_path, "wb") as f:
             for chunk in dl.iter_content(chunk_size=8192):
                 if chunk:

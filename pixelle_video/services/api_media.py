@@ -65,7 +65,7 @@ class APIProviderMediaService:
             "seedance-1-0-lite",
         ],
         "openrouter": [
-            "bytedance/seedance-2.0",
+            "bytedance/seedance-1-5-pro",
         ],
     }
 

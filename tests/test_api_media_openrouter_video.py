@@ -11,7 +11,7 @@ async def test_dispatch_openrouter_video(tmp_path):
     with patch("pixelle_video.services.api_media.OpenRouterVideoClient") as Cli:
         def _gen(**kw): out.write_bytes(b"MP4"); return "http://x/v.mp4"
         Cli.return_value.generate_video.side_effect = _gen
-        res = await svc(prompt="cat", workflow="api/openrouter/bytedance/seedance-2.0",
+        res = await svc(prompt="cat", workflow="api/openrouter/bytedance/seedance-1-5-pro",
                         media_type="video", output_path=str(out), duration=5.0)
         assert res.is_video
         Cli.return_value.generate_video.assert_called_once()
