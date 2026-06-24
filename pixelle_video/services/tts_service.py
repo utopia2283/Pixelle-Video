@@ -25,6 +25,7 @@ from loguru import logger
 from pixelle_video.services.comfy_base_service import ComfyBaseService
 from pixelle_video.utils.tts_util import edge_tts
 from pixelle_video.tts_voices import speed_to_rate
+from pixelle_video.services.api_services.tts_minimax import MiniMaxTTSClient
 
 
 class TTSService(ComfyBaseService):
@@ -113,9 +114,23 @@ class TTSService(ComfyBaseService):
         """
         # Determine inference mode (param > config)
         mode = inference_mode or self.config.get("inference_mode", "local")
-        
+
         # Route to appropriate implementation
-        if mode == "local":
+        if mode == "minimax":
+            # self.config is already config["comfyui"]["tts"]
+            mm = self.config.get("minimax", {})
+            client = MiniMaxTTSClient(
+                api_key=mm.get("api_key"),
+                group_id=mm.get("group_id"),
+            )
+            return client.synthesize(
+                text=text,
+                output_path=output_path or f"output/{__import__('uuid').uuid4().hex}.mp3",
+                voice=voice or mm.get("voice", "Cantonese_GentleLady"),
+                speed=speed if speed is not None else mm.get("speed", 1.0),
+                model=mm.get("model", "speech-2.8-turbo"),
+            )
+        elif mode == "local":
             return await self._call_local_tts(
                 text=text,
                 voice=voice,
