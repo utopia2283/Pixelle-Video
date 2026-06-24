@@ -37,7 +37,7 @@ class APIProviderMediaService:
             "doubao-seedream-4-0-250828",
         ],
         "openrouter": [
-            "bytedance-seed/seedream-4.5",
+            "x-ai/grok-imagine-image-quality",
         ],
     }
 
