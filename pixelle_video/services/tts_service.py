@@ -14,6 +14,7 @@
 TTS (Text-to-Speech) Service - Supports both local and ComfyUI inference
 """
 
+import asyncio
 import os
 import uuid
 from pathlib import Path
@@ -120,12 +121,13 @@ class TTSService(ComfyBaseService):
             # self.config is already config["comfyui"]["tts"]
             mm = self.config.get("minimax", {})
             client = MiniMaxTTSClient(
-                api_key=mm.get("api_key"),
-                group_id=mm.get("group_id"),
+                api_key=mm.get("api_key") or None,
+                group_id=mm.get("group_id") or None,
             )
-            return client.synthesize(
+            return await asyncio.to_thread(
+                client.synthesize,
                 text=text,
-                output_path=output_path or f"output/{__import__('uuid').uuid4().hex}.mp3",
+                output_path=output_path or f"output/{uuid.uuid4().hex}.mp3",
                 voice=voice or mm.get("voice", "Cantonese_GentleLady"),
                 speed=speed if speed is not None else mm.get("speed", 1.0),
                 model=mm.get("model", "speech-2.8-turbo"),

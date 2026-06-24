@@ -137,3 +137,70 @@ async def test_tts_service_minimax_mode(MockClient, tmp_path):
     call_kwargs = mock_instance.synthesize.call_args
     assert call_kwargs.kwargs["text"] == "你好世界" or call_kwargs.args[0] == "你好世界"
     assert result == str(tmp_path / "out.mp3")
+
+
+# ---------------------------------------------------------------------------
+# T-GAP (i): synthesize passes speed into voice_setting.speed in request body
+# ---------------------------------------------------------------------------
+@patch("pixelle_video.services.api_services.tts_minimax.requests.post")
+def test_synthesize_speed_in_request_body(mock_post, tmp_path):
+    """speed kwarg must land in request body voice_setting.speed (pass-through)."""
+    audio_hex = b"spd".hex()
+    mock_post.return_value = MagicMock(
+        status_code=200,
+        json=lambda: {
+            "data": {"audio": audio_hex},
+            "base_resp": {"status_code": 0, "status_msg": "success"},
+        },
+    )
+    mock_post.return_value.raise_for_status = lambda: None
+
+    c = MiniMaxTTSClient(api_key="mm-test")
+    out = tmp_path / "spd.mp3"
+    c.synthesize("test speed", str(out), voice="Cantonese_GentleLady", speed=1.5)
+
+    body = mock_post.call_args.kwargs["json"]
+    assert body["voice_setting"]["speed"] == 1.5, (
+        "speed must be forwarded into voice_setting.speed in the request body"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T-GAP (ii): TTSService minimax mode reads voice/speed/model from config and
+#             passes them through to synthesize (assert_called_once_with style)
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+@patch("pixelle_video.services.tts_service.MiniMaxTTSClient")
+async def test_tts_service_minimax_mode_config_passthrough(MockClient, tmp_path):
+    """voice/speed/model from config["minimax"] must reach synthesize kwargs."""
+    from pixelle_video.services.tts_service import TTSService
+
+    mock_instance = MagicMock()
+    mock_instance.synthesize.return_value = str(tmp_path / "out2.mp3")
+    MockClient.return_value = mock_instance
+
+    config = {
+        "comfyui": {
+            "tts": {
+                "inference_mode": "minimax",
+                "minimax": {
+                    "voice": "Male_Confident",
+                    "speed": 1.3,
+                    "model": "speech-2.8-turbo",
+                },
+            }
+        },
+    }
+
+    svc = TTSService(config=config, core=None)
+    out = str(tmp_path / "out2.mp3")
+    result = await svc("hello config", output_path=out)
+
+    mock_instance.synthesize.assert_called_once_with(
+        text="hello config",
+        output_path=out,
+        voice="Male_Confident",
+        speed=1.3,
+        model="speech-2.8-turbo",
+    )
+    assert result == out

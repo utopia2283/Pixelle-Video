@@ -75,6 +75,8 @@ class TTSMiniMaxConfig(BaseModel):
     model: str = Field(default="speech-2.8-turbo", description="MiniMax TTS model")
     voice: str = Field(default="Cantonese_GentleLady", description="MiniMax voice id (Cantonese)")
     speed: float = Field(default=1.0, ge=0.5, le=2.0, description="Speech speed multiplier (0.5-2.0)")
+    api_key: str = Field(default="", description="MiniMax API Key (falls back to MINIMAX_API_KEY env var when empty)")
+    group_id: str = Field(default="", description="MiniMax Group ID (falls back to MINIMAX_GROUP_ID env var when empty)")
 
 
 class TTSSubConfig(BaseModel):
