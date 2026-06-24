@@ -13,8 +13,8 @@
 | 能力 | Provider / Endpoint | Model | Key (來自 `~/.hermes/.env`) |
 |------|--------------------|-------|------------------------------|
 | LLM（寫稿/分鏡） | MiniMax OpenAI-compat `api.minimax.io/v1/chat/completions` | `MiniMax-M3` | `MINIMAX_API_KEY` |
-| 出圖 | OpenRouter Images `POST /api/v1/images` | `bytedance-seed/seedream-4.5` | `OPENROUTER_API_KEY` |
-| 出片 | OpenRouter Videos `POST /api/v1/videos`（submit→poll→download） | `bytedance/seedance-2.0` | `OPENROUTER_API_KEY` |
+| 出圖 | OpenRouter `POST /chat/completions`（`modalities:["image"]`，攞 `choices[0].message.images[0].image_url.url`） | `x-ai/grok-imagine-image-quality` | `OPENROUTER_API_KEY` |
+| 出片 | OpenRouter Videos `POST /api/v1/videos`（frame_images 經 tmpfiles 公開URL；poll `polling_url`；下載 `unsigned_urls[0]`+Bearer） | `bytedance/seedance-1-5-pro` | `OPENROUTER_API_KEY` |
 | TTS | MiniMax `POST https://api.minimax.io/v1/t2a_v2` | `speech-2.8-turbo`（廣東話，已驗 2026-06-06） | `MINIMAX_API_KEY` |
 
 非目標（YAGNI）：
