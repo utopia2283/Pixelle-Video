@@ -15,6 +15,7 @@ from loguru import logger
 from pixelle_video.config import config_manager
 from pixelle_video.models.media import MediaResult
 from pixelle_video.services.api_services.image_openrouter import OpenRouterImageClient
+from pixelle_video.services.api_services.video_openrouter import OpenRouterVideoClient
 from pixelle_video.utils.os_util import get_output_path
 
 
@@ -62,6 +63,9 @@ class APIProviderMediaService:
             "doubao-seedance-2-0-fast-260128",
             "seedance-1-0-pro",
             "seedance-1-0-lite",
+        ],
+        "openrouter": [
+            "bytedance/seedance-2.0",
         ],
     }
 
@@ -563,6 +567,39 @@ class APIProviderMediaService:
 
         return MediaResult(media_type="image", url=result_path)
 
+    async def _generate_video_openrouter(
+        self,
+        model: str,
+        prompt: str,
+        image_path: Optional[str],
+        output_path: Optional[str],
+        duration: Optional[float],
+        width: Optional[int],
+        height: Optional[int],
+        **params,
+    ) -> MediaResult:
+        cfg = self.config.get("api_providers", {})
+        api_key = cfg.get("openrouter", {}).get("api_key") or None
+        local_proxy = cfg.get("common", {}).get("local_proxy") or None
+        ratio = params.get("video_ratio") or params.get("ratio") or self._ratio(width, height)
+        resolution = params.get("resolution") or "720p"
+        save_path = output_path or os.path.join(self._save_dir(None, "api_videos"), "video.mp4")
+
+        logger.info(f"Generating video via API provider=openrouter, model={model}")
+        client = OpenRouterVideoClient(api_key=api_key, local_proxy=local_proxy)
+        await asyncio.to_thread(
+            client.generate_video,
+            prompt=prompt,
+            image_path=image_path,
+            save_path=save_path,
+            model=model,
+            duration=int(duration or 5),
+            last_image_path=params.get("last_image_path"),
+            video_ratio=ratio,
+            resolution=resolution,
+        )
+        return MediaResult(media_type="video", url=save_path, duration=duration)
+
     async def _generate_video(
         self,
         provider: str,
@@ -575,6 +612,18 @@ class APIProviderMediaService:
         height: Optional[int],
         **params,
     ) -> MediaResult:
+        if provider == "openrouter":
+            return await self._generate_video_openrouter(
+                model=model,
+                prompt=prompt,
+                image_path=image_path,
+                output_path=output_path,
+                duration=duration,
+                width=width,
+                height=height,
+                **params,
+            )
+
         from pixelle_video.services.api_services.video_client import VideoClient
 
         first_clip_path = params.get("first_clip_path") or params.get("first_video_path")
