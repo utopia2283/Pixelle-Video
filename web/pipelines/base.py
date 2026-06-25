@@ -53,5 +53,18 @@ def get_pipeline_ui(name: str) -> PipelineUI:
     return _pipeline_uis.get(name)
 
 def get_all_pipeline_uis() -> List[PipelineUI]:
-    """Get all registered pipeline UI instances"""
-    return list(_pipeline_uis.values())
+    """Get all registered pipeline UI instances.
+
+    When PIXELLE_PIPELINES is set (comma-separated pipeline names), only those
+    pipelines are exposed. Used to restrict a locked deployment to the
+    cloud-backed pipelines (e.g. quick_create) and hide ComfyUI-only advanced
+    modes. Unset -> all pipelines (dev/local default).
+    """
+    import os
+    uis = list(_pipeline_uis.values())
+    allow = os.getenv("PIXELLE_PIPELINES", "").strip()
+    if allow:
+        names = {n.strip() for n in allow.split(",") if n.strip()}
+        filtered = [u for u in uis if u.name in names]
+        return filtered or uis
+    return uis
