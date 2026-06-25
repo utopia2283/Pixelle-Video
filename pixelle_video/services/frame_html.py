@@ -326,9 +326,15 @@ class HTMLFrameGenerator:
 
             cls._browser = None
             cls._playwright = None
+            import os as _os
             from playwright.async_api import async_playwright
             cls._playwright = await async_playwright().start()
+            # Allow pointing at an external Chromium (e.g. a puppeteer-managed
+            # chrome-headless-shell) when Playwright cannot fetch its own build
+            # for the host OS. Unset -> Playwright uses its bundled browser.
+            _exe = _os.getenv("PIXELLE_CHROMIUM_PATH") or None
             cls._browser = await cls._playwright.chromium.launch(
+                executable_path=_exe,
                 args=[
                     '--no-sandbox',
                     '--disable-dev-shm-usage',
