@@ -58,25 +58,38 @@ def render_style_config(pixelle_video):
         tts_config = comfyui_config["tts"]
         
         # Inference mode selection
-        tts_mode = st.radio(
-            tr("tts.inference_mode"),
-            ["local", "comfyui"],
-            horizontal=True,
-            format_func=lambda x: tr(f"tts.mode.{x}"),
-            index=0 if tts_config.get("inference_mode", "local") == "local" else 1,
-            key="tts_inference_mode"
-        )
-        
-        # Show hint based on mode
-        if tts_mode == "local":
-            st.caption(tr("tts.mode.local_hint"))
+        import os as _os
+        _tts_locked = _os.getenv("PIXELLE_LOCK_CONFIG", "").strip().lower() in ("1", "true", "yes")
+        if _tts_locked:
+            # Locked deploy: TTS is fixed to MiniMax Cantonese (forced in the
+            # service layer). Hide the engine/voice selectors entirely.
+            st.caption("🎙️ 粵語語音（自動，無需設定）")
+            tts_mode = "minimax"
         else:
-            st.caption(tr("tts.mode.comfyui_hint"))
+            tts_mode = st.radio(
+                tr("tts.inference_mode"),
+                ["local", "comfyui"],
+                horizontal=True,
+                format_func=lambda x: tr(f"tts.mode.{x}"),
+                index=0 if tts_config.get("inference_mode", "local") == "local" else 1,
+                key="tts_inference_mode"
+            )
+            # Show hint based on mode
+            if tts_mode == "local":
+                st.caption(tr("tts.mode.local_hint"))
+            else:
+                st.caption(tr("tts.mode.comfyui_hint"))
         
         # ================================================================
         # Local Mode UI
         # ================================================================
-        if tts_mode == "local":
+        if _tts_locked:
+            # Locked deploy: MiniMax voice/speed come from config; no UI shown.
+            selected_voice = None
+            tts_speed = None
+            tts_workflow_key = None
+            ref_audio_path = None
+        elif tts_mode == "local":
             # Import voice configuration
             from pixelle_video.tts_voices import EDGE_TTS_VOICES, get_voice_display_name
             
