@@ -740,15 +740,20 @@ def render_style_config(pixelle_video):
                     default_source_index = index
                     break
             source_key = "standard_video_workflow_source" if template_media_type == "video" else "standard_image_workflow_source"
-            workflow_source = st.radio(
-                "生成来源" if get_language() == "zh_CN" else "Generation source",
-                source_options,
-                index=default_source_index,
-                format_func=workflow_source_label,
-                horizontal=True,
-                key=source_key,
-                help=workflow_source_help("快速创作媒体生成" if get_language() == "zh_CN" else "Quick Create media generation"),
-            )
+            if _tts_locked:
+                # Locked: force the cloud (api/OpenRouter) source; hide the selector.
+                workflow_source = "api"
+                st.caption("☁️ 雲端自動生成（已設定）")
+            else:
+                workflow_source = st.radio(
+                    "生成来源" if get_language() == "zh_CN" else "Generation source",
+                    source_options,
+                    index=default_source_index,
+                    format_func=workflow_source_label,
+                    horizontal=True,
+                    key=source_key,
+                    help=workflow_source_help("快速创作媒体生成" if get_language() == "zh_CN" else "Quick Create media generation"),
+                )
 
             if workflow_source == "api":
                 if template_media_type == "video":
@@ -867,9 +872,10 @@ def render_style_config(pixelle_video):
                     key="style_test_prompt"
                 )
             
-                # Preview button
+                # Preview button (hidden in locked deploy — media is generated
+                # only during the full run via the configured cloud workflow)
                 preview_button_label = tr("style.video_preview") if template_media_type == "video" else tr("style.preview")
-                if st.button(preview_button_label, key="preview_style", use_container_width=True):
+                if not _tts_locked and st.button(preview_button_label, key="preview_style", use_container_width=True):
                     if not workflow_key:
                         st.error(
                             "请先选择可用的工作流或模型。"
