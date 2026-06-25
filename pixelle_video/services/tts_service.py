@@ -116,6 +116,14 @@ class TTSService(ComfyBaseService):
         # Determine inference mode (param > config)
         mode = inference_mode or self.config.get("inference_mode", "local")
 
+        # Locked deployment: always use MiniMax (Cantonese) regardless of what the
+        # web UI passes. The UI's TTS selector only exposes local/comfyui, so without
+        # this override a locked deploy would silently fall back to Edge TTS.
+        import os as _os
+        if _os.getenv("PIXELLE_LOCK_CONFIG", "").strip().lower() in ("1", "true", "yes"):
+            mode = "minimax"
+            voice = None  # use the config's MiniMax (Cantonese) voice
+
         # Route to appropriate implementation
         if mode == "minimax":
             # self.config is already config["comfyui"]["tts"]
