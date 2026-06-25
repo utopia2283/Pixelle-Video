@@ -149,10 +149,30 @@ def build_topic_narration_prompt(
     Returns:
         Formatted prompt
     """
-    return TOPIC_NARRATION_PROMPT.format(
+    prompt = TOPIC_NARRATION_PROMPT.format(
         topic=topic,
         n_storyboard=n_storyboard,
         min_words=min_words,
         max_words=max_words
     )
+    return _maybe_force_cantonese(prompt)
+
+
+# Spoken Hong Kong Cantonese override for locked deployments. The base prompt
+# mirrors the input language and would otherwise produce written/Mandarin
+# Chinese; this forces colloquial spoken Cantonese.
+_CANTONESE_INSTRUCTION = (
+    "\n\n# 語言要求（最高優先，覆蓋以上語言設定）\n"
+    "所有 narration 必須用**香港日常口語廣東話**書寫，唔可以用書面語或者普通話。\n"
+    "- 要用口語字詞：嘅、係、唔、冇、咗、喺、佢、嗰、啲、咁、噉、喎、啦、㗎、嘛、咩、點解、而家、唔該、好正、抵睇 等。\n"
+    "- 禁止書面語講法（例如：的→嘅、是→係、不→唔、沒有→冇、了→咗、在→喺、他→佢、那→嗰、這→呢、現在→而家、為什麼→點解、非常→好）。\n"
+    "- 語氣自然，似香港人傾偈／講嘢，唔好生硬。"
+)
+
+
+def _maybe_force_cantonese(prompt: str) -> str:
+    import os
+    if os.getenv("PIXELLE_LOCK_CONFIG", "").strip().lower() in ("1", "true", "yes"):
+        return prompt + _CANTONESE_INSTRUCTION
+    return prompt
 

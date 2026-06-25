@@ -95,10 +95,13 @@ def build_content_narration_prompt(
     Returns:
         Formatted prompt
     """
-    return CONTENT_NARRATION_PROMPT.format(
+    prompt = CONTENT_NARRATION_PROMPT.format(
         content=content,
         n_storyboard=n_storyboard,
         min_words=min_words,
         max_words=max_words
     )
+    # Reuse the locked-deploy spoken-Cantonese override (see topic_narration).
+    from pixelle_video.prompts.topic_narration import _maybe_force_cantonese
+    return _maybe_force_cantonese(prompt)
 
