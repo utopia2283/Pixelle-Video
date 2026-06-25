@@ -23,6 +23,11 @@ from pixelle_video.config import config_manager
 
 def render_advanced_settings():
     """Render system configuration (required) with 2-column layout"""
+    import os
+    # Locked deployment: hide the entire config UI so the team cannot change
+    # keys/models. Config is supplied via config.yaml + env on the server.
+    if os.getenv("PIXELLE_LOCK_CONFIG", "").strip().lower() in ("1", "true", "yes"):
+        return
     # Check if system is configured
     is_configured = config_manager.validate()
     

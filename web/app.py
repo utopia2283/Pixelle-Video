@@ -37,8 +37,35 @@ st.set_page_config(
 )
 
 
+def _require_access_code():
+    """Gate the whole app behind a shared team access code (env PIXELLE_ACCESS_CODE).
+
+    No-op when the env var is unset, so local/dev use is unaffected. When set,
+    the user must enter the matching code once per browser session before any
+    page renders.
+    """
+    import os
+    code = os.getenv("PIXELLE_ACCESS_CODE", "").strip()
+    if not code or st.session_state.get("_pv_authed"):
+        return
+    st.markdown("## 🔒 Pixelle-Video")
+    st.caption("請輸入團隊 Access Code")
+    entered = st.text_input(
+        "Access Code", type="password", key="_pv_code",
+        label_visibility="collapsed", placeholder="Access Code",
+    )
+    if entered:
+        if entered == code:
+            st.session_state["_pv_authed"] = True
+            st.rerun()
+        else:
+            st.error("Access code 唔啱，請再試。")
+    st.stop()
+
+
 def main():
     """Main entry point with navigation"""
+    _require_access_code()
     # Define pages using st.Page
     home_page = st.Page(
         "pages/1_🎬_Home.py",
