@@ -189,6 +189,12 @@ def render_content_input():
 
 def render_bgm_section(key_prefix=""):
     """Render BGM selection section"""
+    import os as _os
+    # Locked deployment: BGM is auto-applied (built-in default.mp3) and the
+    # selector is hidden, so the team gets fully-automatic videos with background
+    # music without any choice. (BGM is a bundled track, not AI-generated.)
+    if _os.getenv("PIXELLE_LOCK_CONFIG", "").strip().lower() in ("1", "true", "yes"):
+        return {"bgm_path": "default.mp3", "bgm_volume": 0.2}
     with st.container(border=True):
         st.markdown(f"**{tr('section.bgm')}**")
         
